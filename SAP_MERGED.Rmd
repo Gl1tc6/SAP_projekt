@@ -1,0 +1,153 @@
+---
+title: "SAP - projekt"
+author: "Vedran Knežević, Andre Medvedić, Jan Celin, Ante Čavar" 
+date: "20.10.2021."
+output:
+  html_document:
+    df_print: paged
+subtitle: 'Procjena kreditnog rizika'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Uvod
+U našem projektu obrađujemo veliki dataset kreditnog stanja korisnika neke banke. Naš je zadatak procjentiti koji čimbenici utječu na sposobnost
+otplate kredita u zadanome roku.
+
+## Dataset - statistika
+```{r}
+data <- read.csv("procjena_kreditnog_rizika.csv")
+library(skimr)
+skim(data)
+```
+Ovdje imamo prikaz statistike za sve varijable kojima imamo pristup. Prva nam tablica pokazuje generalno o podatcima koje smo predstavili u 
+CSV datoteci. Druga tablica daje overview <char> varijabli te njihove statistike. Treća tablica prikazuje statistiku numeričkih varijabli.
+
+
+## Bitniji generalni grafovi
+
+```{r}
+threshold <- quantile(data$CreditAmount, 0.99)  # Set threshold at 99th percentile
+# Exclude data points above the threshold
+filtered_data <- subset(data, CreditAmount <= threshold)
+boxplot(filtered_data$CreditAmount, main="Kredit", ylab="Iznos kredita u €")
+points(mean(filtered_data$CreditAmount), col = "red")
+```
+
+```{r}
+threshold <- quantile(data$CreditAmount, 0.99)  # Set threshold at 99th percentile
+# Exclude data points above the threshold
+filtered_data <- subset(data, CreditAmount <= threshold)
+h = hist(filtered_data$CreditAmount,
+         breaks = 50,
+         main="Histogram iznosa kredita, breaks = 50",
+         xlab="Iznos kredita [€]",
+         ylab='Ponavljanja',
+         col="green"
+         )
+legend("topright", legend = "Srednja vrijednost", fill = "orange")
+legend("top", legend = "Medijan", fill = "red")
+abline(v = mean(filtered_data$CreditAmount), col = "orange", lwd=5, lty=10)
+abline(v = median(filtered_data$CreditAmount), col= "red", lwd=5)
+```
+
+
+```{r}
+library(ggplot2)
+# Create a bar plot
+bar_plot <- ggplot(data, aes(x = PercentOfIncome)) +
+  geom_bar(fill = "blue", color = "black") +
+  labs(title = "Iznos rate/Raspoloživi dohodak",
+       x = "Postotak rata/dohodak",
+       y = "Frekvencija")
+
+# Print the plot
+print(bar_plot)
+```
+
+##TESTOVI
+
+## MUSKI VS ZENSKI KLIJENTI $\Chi$ kvadrat
+
+H0: proporcija defaulta kod muskaraca i zena je jednaka (ekvivalentno da je manja)
+H1: proporcija defaulta je veca kod muskaraca
+
+razina znacajnosti $\alpha$ = 0.05
+
+```{r}
+female_clients <- data[str_detect(data$PersonalStatus, "female"),]
+male_clients <- data[!str_detect(data$PersonalStatus, "female"),]
+num_female_default <- nrow(female_clients[female_clients$Default == 1,])
+num_male_default <- nrow(male_clients[male_clients$Default == 1,])
+
+proportion_matrix <- matrix(c(nrow(male_clients)-num_male_default, 
+                            num_male_default,
+                         nrow(female_clients)-num_female_default,
+                          num_female_default), nrow=2, byrow = T)
+colnames(proportion_matrix) <- c("no_default", "default")
+rownames(proportion_matrix) <- c("male", "female")
+# proportion_matrix
+prop.test(proportion_matrix, alternative = "less")
+```
+
+iz ovoga zakljucujemo na razini znacajnosti 0.05 da muskarci ispunjavaju kreditne obveze razmjerno zenama (tj. da ne mozemo reci da su skloniji neispunjavanju obveza)
+
+
+## SINGLE MUSKI VS ZENSKI
+
+```{r}
+male_single_clients <- male_clients[str_detect(male_clients$PersonalStatus, "single"),]
+num_male_single_default <- sum(male_single_clients$Default == 1)
+
+proportion_matrix[1,] <- c(nrow(male_single_clients) - num_male_single_default,
+                           num_male_single_default)
+# proportion_matrix
+prop.test(proportion_matrix, alternative = "less")
+```
+
+## DIVORCED MUSKI VS ZENSKI
+
+```{r}
+male_divor_clients <- male_clients[str_detect(male_clients$PersonalStatus, "divorced"),]
+num_male_divor_default <- sum(male_divor_clients$Default == 1)
+
+proportion_matrix[1,] <- c(nrow(male_divor_clients) - num_male_divor_default,
+                           num_male_divor_default)
+# proportion_matrix
+prop.test(proportion_matrix, alternative = "less")
+```
+## MARRIED MUSKI VS ZENSKI
+
+```{r}
+male_married_clients <- male_clients[str_detect(male_clients$PersonalStatus, "married"),]
+num_male_married_default <- sum(male_married_clients$Default == 1)
+
+proportion_matrix[1,] <- c(nrow(male_married_clients) - num_male_married_default,
+                           num_male_married_default)
+# proportion_matrix
+prop.test(proportion_matrix, alternative = "less")
+```
+
+```{r}
+Values <- matrix(c((nrow(female_clients)-num_female_default),
+                   (nrow(male_clients)-num_male_default),
+                   num_female_default, 
+                   num_male_default
+                     ), nrow=2, ncol=2, byrow = T)
+
+barplot(Values, main="Graficki prikaz", names.arg=c("female", "male"), xlab="", col = c("blue", "orange"))
+```
+
+
+```{r}
+
+Values <- matrix(c((nrow(female_clients)-num_female_default)/nrow(female_clients),
+                   (nrow(male_clients)-num_male_default)/nrow(male_clients),
+                   num_female_default/nrow(female_clients), 
+                   num_male_default/nrow(male_clients)
+                     ), nrow=2, ncol=2, byrow = T)
+
+barplot(Values, main="Graficki prikaz", names.arg=c("female", "male"), xlab="", col = c("blue", "orange"))
+```
