@@ -1,0 +1,69 @@
+---
+title: "SAP - projekt"
+author: "Vedran Knežević, Andre Medvedić, Jan Celin, Ante Čavar" 
+date: "20.10.2021."
+output:
+  html_document:
+    df_print: paged
+subtitle: 'Procjena kreditnog rizika'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Uvod
+U našem projektu obrađujemo veliki dataset kreditnog stanja korisnika neke banke. Naš je zadatak procjentiti koji čimbenici utječu na sposobnost
+otplate kredita u zadanome roku.
+
+## Dataset - statistika
+```{r}
+data <- read.csv("procjena_kreditnog_rizika.csv")
+library(skimr)
+skim(data)
+```
+Ovdje imamo prikaz statistike za sve varijable kojima imamo pristup. Prva nam tablica pokazuje generalno o podatcima koje smo predstavili u 
+CSV datoteci. Druga tablica daje overview <char> varijabli te njihove statistike. Treća tablica prikazuje statistiku numeričkih varijabli.
+
+
+## Bitniji generalni grafovi
+
+```{r}
+threshold <- quantile(data$CreditAmount, 0.99)  # Set threshold at 99th percentile
+# Exclude data points above the threshold
+filtered_data <- subset(data, CreditAmount <= threshold)
+boxplot(filtered_data$CreditAmount, main="Kredit", ylab="Iznos kredita u €")
+points(mean(filtered_data$CreditAmount), col = "red")
+```
+
+```{r}
+threshold <- quantile(data$CreditAmount, 0.99)  # Set threshold at 99th percentile
+# Exclude data points above the threshold
+filtered_data <- subset(data, CreditAmount <= threshold)
+h = hist(filtered_data$CreditAmount,
+         breaks = 50,
+         main="Histogram iznosa kredita, breaks = 50",
+         xlab="Iznos kredita [€]",
+         ylab='Ponavljanja',
+         col="green"
+         )
+legend("topright", legend = "Srednja vrijednost", fill = "orange")
+legend("top", legend = "Medijan", fill = "red")
+abline(v = mean(filtered_data$CreditAmount), col = "orange", lwd=5, lty=10)
+abline(v = median(filtered_data$CreditAmount), col= "red", lwd=5)
+```
+
+
+```{r}
+library(ggplot2)
+# Create a bar plot
+bar_plot <- ggplot(data, aes(x = PercentOfIncome)) +
+  geom_bar(fill = "blue", color = "black") +
+  labs(title = "Iznos rate/Raspoloživi dohodak",
+       x = "Postotak rata/dohodak",
+       y = "Frekvencija")
+
+# Print the plot
+print(bar_plot)
+```
+
