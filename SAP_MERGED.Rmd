@@ -10,23 +10,27 @@ subtitle: 'Procjena kreditnog rizika'
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(stringr)
+library(tidyr)
+library(dplyr)
+library(skimr)
+library(ggplot2)
 ```
 
 ## Uvod
-U našem projektu obrađujemo veliki dataset kreditnog stanja korisnika neke banke. Naš je zadatak procjentiti koji čimbenici utječu na sposobnost
-otplate kredita u zadanome roku.
 
-## Dataset - statistika
+U našem projektu obrađujemo veliki dataset kreditnog stanja korisnika neke banke. Naš je zadatak procjentiti koji čimbenici utječu na sposobnost otplate kredita u zadanome roku.
+
+## Skup podataka - statistika
+
 ```{r}
 data <- read.csv("procjena_kreditnog_rizika.csv")
-library(skimr)
 skim(data)
 ```
-Ovdje imamo prikaz statistike za sve varijable kojima imamo pristup. Prva nam tablica pokazuje generalno o podatcima koje smo predstavili u 
-CSV datoteci. Druga tablica daje overview <char> varijabli te njihove statistike. Treća tablica prikazuje statistiku numeričkih varijabli.
 
+Ovdje imamo prikaz statistike za sve varijable kojima imamo pristup. Prva nam tablica pokazuje generalno o podatcima koje smo predstavili u CSV datoteci. Druga tablica daje overview <char> varijabli te njihove statistike. Treća tablica prikazuje statistiku numeričkih varijabli.
 
-## Bitniji generalni grafovi
+## Uvodni grafovi
 
 ```{r}
 threshold <- quantile(data$CreditAmount, 0.99)  # Set threshold at 99th percentile
@@ -53,9 +57,8 @@ abline(v = mean(filtered_data$CreditAmount), col = "orange", lwd=5, lty=10)
 abline(v = median(filtered_data$CreditAmount), col= "red", lwd=5)
 ```
 
-
 ```{r}
-library(ggplot2)
+
 # Create a bar plot
 bar_plot <- ggplot(data, aes(x = PercentOfIncome)) +
   geom_bar(fill = "blue", color = "black") +
@@ -69,12 +72,40 @@ print(bar_plot)
 
 ##TESTOVI
 
-## MUSKI VS ZENSKI KLIJENTI $\Chi$ kvadrat
+## 1.pitanje: Možemo li temeljem drugih dostupnih varijabli predvidjeti hoće li nastupiti _default_ za određenog klijenta? Koje varijable povećavaju tu vjerojatnost?
 
-H0: proporcija defaulta kod muskaraca i zena je jednaka (ekvivalentno da je manja)
-H1: proporcija defaulta je veca kod muskaraca
+```{r}
+credit_history_default <- data.frame(category = data$CreditHistory %>% unique)
 
-razina znacajnosti $\alpha$ = 0.05
+credit_history_default$no_default <- sapply(credit_history_default$category, function(x){
+  nrow(data[data$CreditHistory == x & data$Default==0,])
+})
+
+credit_history_default$default <- sapply(credit_history_default$category, function(x){
+  nrow(data[data$CreditHistory == x & data$Default==1,])
+})
+
+credit_history_matirx <- matrix(
+  c(credit_history_default$no_default, credit_history_default$default), nrow = 2, byrow = T
+)
+rownames(credit_history_matirx) <- c("no_default", "default")
+colnames(credit_history_matirx) <- credit_history_default$category
+
+chisq.test(credit_history_matirx, correct = F)
+```
+
+## 2.pitanje: Jesu li muškarci skloniji neispunjavanju obveza po kreditu od žena?
+
+U ovom odsječku uspoređujemo odnos između dviju kategorijskih varijabli (spol, izvršavanje svojih novčanih obveza). Uspoređivat ćemo je li kod muškaraca i žena jednaka proporcija onih koji nisu izvršili svoje novčane obaveze (default).
+
+Sve statistike provjeravamo na razina značajnosti $\alpha$ = 0.05. Ispitujemo jednostranu alternativu (neispunjavanje obveza je češće kod muškaraca).
+
+### Statistika nad svim muškarcima i ženama u skupu podataka
+
+H0: Proporcija onih koji nisu ispunili obveza naspram onih koji su ispunili obaveze jednaka je kod muškaraca i žena (ili je manja kod muškaraca).
+H1: Proporcija osoba koje nisu ispunile obaveze naspram onih koji su ispunili obaveze veća je kod muškaraca.
+
+
 
 ```{r}
 female_clients <- data[str_detect(data$PersonalStatus, "female"),]
@@ -92,43 +123,8 @@ rownames(proportion_matrix) <- c("male", "female")
 prop.test(proportion_matrix, alternative = "less")
 ```
 
-iz ovoga zakljucujemo na razini znacajnosti 0.05 da muskarci ispunjavaju kreditne obveze razmjerno zenama (tj. da ne mozemo reci da su skloniji neispunjavanju obveza)
+Iz ovoga zaključujemo, na razini značajnosti 0.05, da muškarci ispunjavaju kreditne obveze razmjerno ženama (tj. ne možemo reći da su skloniji neispunjavanju obveza).
 
-
-## SINGLE MUSKI VS ZENSKI
-
-```{r}
-male_single_clients <- male_clients[str_detect(male_clients$PersonalStatus, "single"),]
-num_male_single_default <- sum(male_single_clients$Default == 1)
-
-proportion_matrix[1,] <- c(nrow(male_single_clients) - num_male_single_default,
-                           num_male_single_default)
-# proportion_matrix
-prop.test(proportion_matrix, alternative = "less")
-```
-
-## DIVORCED MUSKI VS ZENSKI
-
-```{r}
-male_divor_clients <- male_clients[str_detect(male_clients$PersonalStatus, "divorced"),]
-num_male_divor_default <- sum(male_divor_clients$Default == 1)
-
-proportion_matrix[1,] <- c(nrow(male_divor_clients) - num_male_divor_default,
-                           num_male_divor_default)
-# proportion_matrix
-prop.test(proportion_matrix, alternative = "less")
-```
-## MARRIED MUSKI VS ZENSKI
-
-```{r}
-male_married_clients <- male_clients[str_detect(male_clients$PersonalStatus, "married"),]
-num_male_married_default <- sum(male_married_clients$Default == 1)
-
-proportion_matrix[1,] <- c(nrow(male_married_clients) - num_male_married_default,
-                           num_male_married_default)
-# proportion_matrix
-prop.test(proportion_matrix, alternative = "less")
-```
 
 ```{r}
 Values <- matrix(c((nrow(female_clients)-num_female_default),
@@ -137,7 +133,9 @@ Values <- matrix(c((nrow(female_clients)-num_female_default),
                    num_male_default
                      ), nrow=2, ncol=2, byrow = T)
 
-barplot(Values, main="Graficki prikaz", names.arg=c("female", "male"), xlab="", col = c("blue", "orange"))
+barplot(Values, main="Kvantitativni prikaz", names.arg=c("žene", "muškarci"), xlab="spol", col = c("blue", "orange"))
+
+legend("topright", inset = c(-0.1, 0), c("no default","default"), fill = c("blue", "orange"))
 ```
 
 
@@ -149,5 +147,168 @@ Values <- matrix(c((nrow(female_clients)-num_female_default)/nrow(female_clients
                    num_male_default/nrow(male_clients)
                      ), nrow=2, ncol=2, byrow = T)
 
-barplot(Values, main="Graficki prikaz", names.arg=c("female", "male"), xlab="", col = c("blue", "orange"))
+
+barplot(Values, main="Postotni prikaz", names.arg=c("žene", "muškarci"), xlab="spol", col = c("blue", "orange"))
+
+
+legend("topright", inset = c(-0.1, 0), c("no default","default"), fill = c("blue", "orange"))
+
 ```
+
+
+### Statistika nad slobodnim muškarcima i ženama u skupu podataka
+
+H0: Proporcija onih koji nisu ispunili obveza naspram onih koji su ispunili obaveze jednaka je kod slobodnih muškaraca i žena (ili je manja kod slobodnih muškaraca).
+H1: Proporcija osoba koje nisu ispunile obaveze naspram onih koji su ispunili obaveze veća je kod slobodnih muškaraca.
+
+
+```{r}
+male_single_clients <- male_clients[str_detect(male_clients$PersonalStatus, "single"),]
+num_male_single_default <- sum(male_single_clients$Default == 1)
+
+proportion_matrix[1,] <- c(nrow(male_single_clients) - num_male_single_default,
+                           num_male_single_default)
+# proportion_matrix
+prop.test(proportion_matrix, alternative = "less")
+```
+
+Iz ovoga zaključujemo, na razini značajnosti 0.05, da slobodni muškarci ispunjavaju kreditne obveze razmjerno ženama (tj. ne možemo reći da su skloniji neispunjavanju obveza).
+
+
+```{r}
+Values <- matrix(c((nrow(female_clients)-num_female_default),
+                   (nrow(male_single_clients)-num_male_single_default),
+                   num_female_default, 
+                   num_male_single_default
+                     ), nrow=2, ncol=2, byrow = T)
+
+barplot(Values, main="Kvantitativni prikaz", names.arg=c("žene", "slobodni muškarci"), xlab="spol", col = c("blue", "orange"))
+
+legend("topright", inset = c(-0.1, 0), c("no default","default"), fill = c("blue", "orange"))
+```
+
+
+```{r}
+
+Values <- matrix(c((nrow(female_clients)-num_female_default)/nrow(female_clients),
+                   (nrow(male_single_clients)-num_male_single_default)/nrow(male_single_clients),
+                   num_female_default/nrow(female_clients), 
+                   num_male_single_default/nrow(male_single_clients)
+                     ), nrow=2, ncol=2, byrow = T)
+
+barplot(Values, main="Postotni prikaz", names.arg=c("žene", "slobodni muškarci"), xlab="spol", col = c("blue", "orange"))
+
+legend("topright", inset = c(-0.1, 0), c("no default", "default"), fill = c("blue", "orange"))
+```
+### Statistika nad rastavljenim muškarcima i ženama u skupu podataka
+
+H0: Proporcija onih koji nisu ispunili obveza naspram onih koji su ispunili obaveze jednaka je kod rastavljenih muškaraca i žena (ili je manja kod rastavljenih muškaraca).
+H1: Proporcija osoba koje nisu ispunile obaveze naspram onih koji su ispunili obaveze veća je kod rastavljenih muškaraca.
+
+```{r}
+male_divor_clients <- male_clients[str_detect(male_clients$PersonalStatus, "divorced"),]
+num_male_divor_default <- sum(male_divor_clients$Default == 1)
+
+proportion_matrix[1,] <- c(nrow(male_divor_clients) - num_male_divor_default,
+                           num_male_divor_default)
+# proportion_matrix
+prop.test(proportion_matrix, alternative = "less")
+```
+
+Iz ovoga zaključujemo, na razini značajnosti 0.05, da rastavljeni muškarci ispunjavaju kreditne obveze razmjerno ženama (tj. ne možemo reći da su skloniji neispunjavanju obveza).
+
+```{r}
+Values <- matrix(c((nrow(female_clients)-num_female_default),
+                   (nrow(male_divor_clients)-num_male_divor_default),
+                   num_female_default, 
+                   num_male_divor_default
+                     ), nrow=2, ncol=2, byrow = T)
+
+barplot(Values, main="Kvantitativni prikaz", names.arg=c("žene", "rastavljeni muškarci"), xlab="spol", col = c("blue", "orange"))
+
+legend("topright", inset = c(-0.1, 0), c("no default", "default"), fill = c("blue", "orange"))
+```
+
+
+```{r}
+
+Values <- matrix(c((nrow(female_clients)-num_female_default)/nrow(female_clients),
+                   (nrow(male_divor_clients)-num_male_divor_default)/nrow(male_divor_clients),
+                   num_female_default/nrow(female_clients), 
+                   num_male_divor_default/nrow(male_divor_clients)
+                     ), nrow=2, ncol=2, byrow = T)
+
+barplot(Values, main="Postotni prikaz", names.arg=c("žene", "rastavljeni muškarci"), xlab="spol", col = c("blue", "orange"))
+
+legend("topright", inset = c(-0.1, 0), c("no default", "default"), fill = c("blue", "orange"))
+
+```
+
+
+
+### Statistika nad oženjenim muškarcima i ženama u skupu podataka
+
+H0: Proporcija onih koji nisu ispunili obveza naspram onih koji su ispunili obaveze jednaka je kod oženjenih muškaraca i žena (ili je manja kod oženjenih muškaraca).
+H1: Proporcija osoba koje nisu ispunile obaveze naspram onih koji su ispunili obaveze veća je kod oženjenih muškaraca.
+
+```{r}
+male_married_clients <- male_clients[str_detect(male_clients$PersonalStatus, "married"),]
+num_male_married_default <- sum(male_married_clients$Default == 1)
+
+proportion_matrix[1,] <- c(nrow(male_married_clients) - num_male_married_default,
+                           num_male_married_default)
+# proportion_matrix
+prop.test(proportion_matrix, alternative = "less")
+```
+
+Iz ovoga zaključujemo, na razini značajnosti 0.05, da oženjeni muškarci ispunjavaju kreditne obveze razmjerno ženama (tj. ne možemo reći da su skloniji neispunjavanju obveza).
+
+
+```{r}
+Values <- matrix(c((nrow(female_clients)-num_female_default),
+                   (nrow(male_married_clients)-num_male_married_default),
+                   num_female_default, 
+                   num_male_married_default
+                     ), nrow=2, ncol=2, byrow = T)
+
+barplot(Values, main="Kvantitativni prikaz", names.arg=c("žene", "oženjeni muškarci"), xlab="spol", col = c("blue", "orange"))
+
+legend("topright", inset = c(-0.1, 0), c("no default", "default"), fill = c("blue", "orange"))
+```
+
+
+```{r}
+
+Values <- matrix(c((nrow(female_clients)-num_female_default)/nrow(female_clients),
+                   (nrow(male_married_clients)-num_male_married_default)/nrow(male_married_clients),
+                   num_female_default/nrow(female_clients), 
+                   num_male_married_default/nrow(male_married_clients)
+                     ), nrow=2, ncol=2, byrow = T)
+
+barplot(Values, main="Postotni udio", names.arg=c("žene", "oženjeni muškarci"), xlab="spol", col = c("blue", "orange"))
+
+legend("topright", inset = c(-0.1, 0), c("no default", "default"), fill = c("blue", "orange"))
+```
+
+
+## 3. pitanje: Postoje li razlike u traženom iznosu kredita prema imovini klijenta?
+
+```{r}
+c("real estate", "building society savings agreement/ life insurance",
+  "unknown / no property", "car or other, not in attribute Account") %>% 
+  sapply(function(x) {
+    filter(data, Property==x) %>% pull(CreditAmount) -> numbers
+    str_c(x, " n: ", length(numbers), "\n") %>% cat()
+    print(summary(numbers))
+    str_c(x, " standard deviation: ", sd(numbers), "\n") %>% cat()
+    cat("-------------------------------------------\n")
+    numbers
+  }) -> Prop_category
+
+boxplot(Prop_category, names=c("real estate", "life insurance", "unknown", "car"))
+
+for(x in 1:length(Prop_category)) {
+  hist(Prop_category[[x]], main = str_c("Histogram of ", names(Prop_category)[x]), xlab="Credit Amount")
+}
+```
+
