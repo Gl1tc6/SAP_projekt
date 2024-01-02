@@ -1,11 +1,12 @@
 ---
 title: "SAP - projekt"
-author: "Vedran Knežević, Andre Medvedić, Jan Celin, Ante Čavar" 
+author: "Vedran Knežević, Andre Medvedić, Jan Celin, Ante Čavar"
 date: "20.10.2021."
 output:
+  pdf_document: default
   html_document:
     df_print: paged
-subtitle: 'Procjena kreditnog rizika'
+subtitle: Procjena kreditnog rizika
 ---
 
 ```{r setup, include=FALSE}
@@ -13,7 +14,6 @@ knitr::opts_chunk$set(echo = TRUE)
 library(stringr)
 library(tidyr)
 library(dplyr)
-library(skimr)
 library(ggplot2)
 ```
 
@@ -25,10 +25,129 @@ U našem projektu obrađujemo veliki skup podataka kreditnog stanja korisnika ne
 
 ```{r}
 data <- read.csv("procjena_kreditnog_rizika.csv")
-skim(data)
+
+
+cat("number of missing values: ", sum(is.na(data[,])), "\n")
+
+data$AccountStatus <- factor(
+  data$AccountStatus, levels = c(
+    "no checking account", 
+    "... < 0",
+    "0 <= ... < 200",
+    "... >= 200")
+)
+data$CreditHistory <- factor(
+  data$CreditHistory, levels = c(
+    "delay in paying off in the past",
+    "critical account/ other credits existing (not at this bank)",
+    "no credits taken/ all credits paid back duly",
+    "existing credits paid back duly till now",
+    "all credits at this bank paid back duly"
+  )
+)
+data$Purpose <- factor(data$Purpose)
+data$Account <- factor(
+  data$Purpose, levels = c(
+    "Unknown / no savings account",
+    "... < 100",
+    "100 <= ... < 500", 
+    "500 <= ... < 1000",
+    "... >= 1000"
+  )
+)
+data$EmploymentSince <- factor(
+  data$EmploymentSince, levels = c(
+    "unemployed",
+    "... < 1 year",
+    "1 <= ... < 4 years",
+    "4 <= ... < 7 years",
+    "... >= 7 years"
+  )
+)
+data$PercentOfIncome <- factor(
+  data$PercentOfIncome, levels = c(
+    "... < 20%",
+    "20% <= ... < 25%",
+    "25% <= ... < 35%",
+    "... >= 35%"
+  )
+)
+data$OtherDebtors <- factor(
+  data$OtherDebtors, levels = c(
+    "none",
+    "guarantor",
+    "co-applicant"
+  )
+)
+data$ResidenceSince <- factor(
+  data$ResidenceSince, levels = c(
+    "... < 1 year",
+    "1 <= ... < 4 years",
+    "4 <= ... < 7 years",
+    "... >= 7 years"
+  )
+)
+data$Property <- factor(
+  data$Property, levels = c(
+    "unknown / no property",
+    "building society savings agreement/ life insurance",
+    "car or other, not in attribute Account",
+    "real estate"
+  )
+)
+data$OtherInstallPlans <- factor(
+  data$OtherInstallPlans, levels = c(
+    "none",
+    "stores",
+    "bank"
+  )
+)
+data$Housing <- factor(
+  data$Housing, levels = c(
+    "for free",
+    "rent",
+    "own"
+  )
+)
+data$NumExistingCredits <- factor(
+  data$NumExistingCredits, levels = c(
+    "1",
+    "2 or 3",
+    "4 or 5",
+    "above 6"
+  )
+)
+data$Job <- factor(
+  data$Job, levels = c(
+    "unemployed/ unskilled - non-resident",
+    "unskilled - resident",
+    "management/ self-employed/highly qualified employee/ officer",
+    "skilled employee / official"
+  )
+)
+data$NumberOfDependents <- factor(
+  data$NumberOfDependents, levels = c(
+    "less than 3",
+    "3 or more"
+  )
+)
+data$Telephone <- factor(
+  data$Telephone, levels = c(
+    "none",
+    "yes, registered under the customers name"
+  )
+)
+data$ForeignWorker <- factor(
+  data$ForeignWorker, levels = c(
+    "no",
+    "yes"
+  )
+)
+summary(data)
 ```
 
-Ovdje imamo prikaz statistike za sve varijable kojima imamo pristup. Prva nam tablica pokazuje generalne informacije o podatcima koje smo predstavili u CSV datoteci. Druga tablica daje pregled <char> varijabli te njihove statistike. Treća tablica prikazuje statistiku numeričkih varijabli.
+Vidimo da je skup poprilično čist (nema nedostajućih vrijednosti). Iako bi neki stupci moguće bili korisniji da su numerički prije nego kategorički. 
+
 
 ## Uvodni grafovi
 
@@ -124,9 +243,24 @@ colnames(proportion_matrix) <- c("no_default", "default")
 rownames(proportion_matrix) <- c("male", "female")
 # proportion_matrix
 prop.test(proportion_matrix, alternative = "less")
+
 ```
 
 Iz ovoga zaključujemo, na razini značajnosti 0.05, da muškarci ispunjavaju kreditne obveze razmjerno ženama (tj. ne možemo reći da su skloniji neispunjavanju obveza).
+
+Provodimo Z-test o dvije proporcije s očekivanjem da će nam dati vrlo slične rezultate kao i $\chi^2$-test.
+
+```{r}
+n1 <- nrow(male_clients)
+n2 <- nrow(female_clients)
+k1 <- n1 - num_male_default
+k2 <- n2 - num_female_default
+
+Z_stat <- (k1/n1-k2/n2)/sqrt(((k1+k2)/(n1+n2))*(1-(k1+k2)/(n1+n2))*(1/n1+1/n2))
+cat("The p-value of the Z statistic is: ", pnorm(Z_stat))
+```
+Kao što možemo uočiti Z-test nam daje isti zaključak i vrlo sličnu p-vrijednost kao i $\chi^2$-test pa ćemo nadalje koristiti $\chi^2$ jer je on implementiran u R-u.
+
 
 ```{r}
 Values <- matrix(c((nrow(female_clients)-num_female_default),
