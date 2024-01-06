@@ -15,6 +15,7 @@ library(stringr)
 library(tidyr)
 library(dplyr)
 library(ggplot2)
+library(caret)
 ```
 
 # Uvod
@@ -47,8 +48,8 @@ data$CreditHistory <- factor(
 )
 data$Purpose <- factor(data$Purpose)
 data$Account <- factor(
-  data$Purpose, levels = c(
-    "Unknown / no savings account",
+  data$Account, levels = c(
+    "unknown/ no savings account",
     "... < 100",
     "100 <= ... < 500", 
     "500 <= ... < 1000",
@@ -72,6 +73,9 @@ data$PercentOfIncome <- factor(
     "... >= 35%"
   )
 )
+data$PersonalStatus <- factor(
+  data$PersonalStatus
+)
 data$OtherDebtors <- factor(
   data$OtherDebtors, levels = c(
     "none",
@@ -84,7 +88,7 @@ data$ResidenceSince <- factor(
     "... < 1 year",
     "1 <= ... < 4 years",
     "4 <= ... < 7 years",
-    "... >= 7 years"
+    ".. >= 7 years"
   )
 )
 data$Property <- factor(
@@ -143,10 +147,15 @@ data$ForeignWorker <- factor(
     "yes"
   )
 )
+data$Default <- factor(
+  data$Default,
+  levels = c(0,1),
+  labels = c(FALSE, TRUE)
+)
 summary(data)
 ```
 
-Vidimo da je skup poprilično čist (nema nedostajućih vrijednosti). Iako bi neki stupci moguće bili korisniji da su numerički prije nego kategorički. 
+Vidimo da je skup poprilično čist (nema nedostajućih vrijednosti). Iako bi neki stupci moguće bili korisniji da su numerički prije nego kategorički.
 
 
 ## Uvodni grafovi
@@ -193,30 +202,64 @@ print(bar_plot)
 
 ## 1.pitanje: Možemo li temeljem drugih dostupnih varijabli predvidjeti hoće li nastupiti *default* za određenog klijenta? Koje varijable povećavaju tu vjerojatnost?
 
-U sljedećem odsječku uspoređujemo odnos između dviju kategorijskih varijabli: CreditHistory i Default. Cilj je testirati postoji li veza između nečije kreditne povijesti i toga ispunjavaju li kreditne obveze ili ne. H0: Varijable Default i CreditHistory su nezavisne.\
-H1: Varijable Default i CreditHistory su zavisne.
+Primjeren način za odgovoriti na ovo pitanje je razavoj dobrog modela logističke regresije. Kako bi dobili nekakvu okvirnu sliku o međuovisnostima naših regresora valjalo bi dobiti korelacijsku matricu.
 
 ```{r}
-credit_history_default <- data.frame(category = data$CreditHistory %>% unique)
-
-credit_history_default$no_default <- sapply(credit_history_default$category, function(x){
-  nrow(data[data$CreditHistory == x & data$Default==0,])
-})
-
-credit_history_default$default <- sapply(credit_history_default$category, function(x){
-  nrow(data[data$CreditHistory == x & data$Default==1,])
-})
-
-credit_history_matirx <- matrix(
-  c(credit_history_default$no_default, credit_history_default$default), nrow = 2, byrow = T
-)
-rownames(credit_history_matirx) <- c("no_default", "default")
-colnames(credit_history_matirx) <- credit_history_default$category
-
-chisq.test(credit_history_matirx, correct = F)
+cor_matrix <- cor(sapply(data, as.numeric))
+cor_matrix
 ```
 
-Na temelju ovog testa na razini značajnosti $\alpha$ = 0.05 odbijamo nultu hipotezu u korist alternativne hipoteze. Drugim riječima, zaključujemo da postoji zavisnost između varijabli Default i CreditHistory.
+Budući je izlaz u R-u nepregledan predočit ćemo koeficijente varijable čija je apsolutna vrijednost veća od 0.3. Varijable kod kojih dolazi do takvih korelacija su sljedeće:
+
+Duration i CreditAmount
+```{r}
+cor_matrix["Duration", "CreditAmount"]
+```
+
+CreditHistory i NumExistingCredits
+```{r}
+cor_matrix["CreditHistory", "NumExistingCredits"]
+```
+
+ResidenceSince i Housing
+```{r}
+cor_matrix["ResidenceSince","Housing"]
+```
+Property i Housing
+```{r}
+cor_matrix["Property", "Housing"]
+```
+
+```{r}
+logreg.mdl <- glm(Default ~ AccountStatus + Duration + CreditHistory + Purpose + CreditAmount + Account + EmploymentSince + PercentOfIncome + PersonalStatus + OtherDebtors + ResidenceSince + Property + Age + OtherInstallPlans + Housing + NumExistingCredits + Job + NumberOfDependents + Telephone + ForeignWorker, data = data, family = binomial())
+summary(logreg.mdl)
+```
+
+Sad ćemo razmotriti neke od mjera kvalitete modela.
+
+```{r}
+Ypredicted <- logreg.mdl$fitted.values >= 0.5
+tab <- table(data$Default, Ypredicted)
+
+tab
+```
+
+```{r}
+accuracy = sum(diag(tab)) / sum(tab)
+precision = tab[2,2] / sum(tab[,2])
+recall = tab[2,2] / sum(tab[2,])
+specificity = tab[1,1] / sum(tab[,1])
+
+accuracy
+
+precision
+
+recall
+
+specificity
+```
+
+
 
 ## 2.pitanje: Jesu li muškarci skloniji neispunjavanju obveza po kreditu od žena?
 
@@ -259,8 +302,8 @@ k2 <- n2 - num_female_default
 Z_stat <- (k1/n1-k2/n2)/sqrt(((k1+k2)/(n1+n2))*(1-(k1+k2)/(n1+n2))*(1/n1+1/n2))
 cat("The p-value of the Z statistic is: ", pnorm(Z_stat))
 ```
-Kao što možemo uočiti Z-test nam daje isti zaključak i vrlo sličnu p-vrijednost kao i $\chi^2$-test pa ćemo nadalje koristiti $\chi^2$ jer je on implementiran u R-u.
 
+Kao što možemo uočiti Z-test nam daje isti zaključak i vrlo sličnu p-vrijednost kao i $\chi^2$-test pa ćemo nadalje koristiti $\chi^2$ jer je on implementiran u R-u.
 
 ```{r}
 Values <- matrix(c((nrow(female_clients)-num_female_default),
