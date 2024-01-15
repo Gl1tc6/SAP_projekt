@@ -16,6 +16,7 @@ library(tidyr)
 library(dplyr)
 library(ggplot2)
 library(caret)
+library(gridExtra)
 ```
 
 # Uvod
@@ -206,7 +207,7 @@ Primjeren način za odgovoriti na ovo pitanje je razavoj dobrog modela logistič
 
 ```{r}
 cor_matrix <- cor(sapply(data, as.numeric))
-cor_matrix
+# cor_matrix
 ```
 
 Budući je izlaz u R-u nepregledan predočit ćemo koeficijente varijable čija je apsolutna vrijednost veća od 0.3. Varijable kod kojih dolazi do takvih korelacija su sljedeće:
@@ -231,18 +232,52 @@ cor_matrix["Property", "Housing"]
 ```
 
 ```{r}
-logreg.mdl <- glm(Default ~ AccountStatus + Duration + CreditHistory + Purpose + CreditAmount + Account + EmploymentSince + PercentOfIncome + PersonalStatus + OtherDebtors + ResidenceSince + Property + Age + OtherInstallPlans + Housing + NumExistingCredits + Job + NumberOfDependents + Telephone + ForeignWorker, data = data, family = binomial())
+logreg.mdl <- glm(Default ~ as.numeric(AccountStatus) + Duration + as.numeric(CreditHistory) + Purpose + CreditAmount + as.numeric(Account) + as.numeric(EmploymentSince) + as.numeric(PercentOfIncome) + PersonalStatus + OtherDebtors + as.numeric(ResidenceSince) + as.numeric(Property) + Age + OtherInstallPlans + Housing + as.numeric(NumExistingCredits) + as.numeric(Job) + as.numeric(NumberOfDependents) + Telephone + ForeignWorker, data = data, family = binomial())
 summary(logreg.mdl)
 ```
 
 Sad ćemo razmotriti neke od mjera kvalitete modela.
 
 ```{r}
+Rsq = 1 - logreg.mdl$deviance/logreg.mdl$null.deviance
+Rsq
+
 Ypredicted <- logreg.mdl$fitted.values >= 0.5
 tab <- table(data$Default, Ypredicted)
 
 tab
 ```
+
+```{r}
+accuracy = sum(diag(tab)) / sum(tab)
+precision = tab[2,2] / sum(tab[,2])
+recall = tab[2,2] / sum(tab[2,])
+specificity = tab[1,1] / sum(tab[,1])
+
+accuracy
+
+precision
+
+recall
+
+specificity
+```
+```{r}
+logreg.mdl2 <- glm(Default ~ as.numeric(AccountStatus) + Duration + as.numeric(CreditHistory) + Purpose + CreditAmount + as.numeric(EmploymentSince) + as.numeric(PercentOfIncome) + as.numeric(Property)+ Age + OtherInstallPlans + Telephone + ForeignWorker, data = data, family = binomial())
+summary(logreg.mdl2)
+```
+
+
+```{r}
+Rsq = 1 - logreg.mdl2$deviance/logreg.mdl$null.deviance
+Rsq
+
+Ypredicted <- logreg.mdl2$fitted.values >= 0.5
+tab <- table(data$Default, Ypredicted)
+
+tab
+```
+
 
 ```{r}
 accuracy = sum(diag(tab)) / sum(tab)
@@ -273,14 +308,14 @@ H0: Proporcija onih koji nisu ispunili obveza naspram onih koji su ispunili obav
 H1: Proporcija osoba koje nisu ispunile obaveze naspram onih koji su ispunili obaveze veća je kod muškaraca.
 
 ```{r}
-female_clients <- data[str_detect(data$PersonalStatus, "female"),]
-male_clients <- data[!str_detect(data$PersonalStatus, "female"),]
-num_female_default <- nrow(female_clients[female_clients$Default == 1,])
-num_male_default <- nrow(male_clients[male_clients$Default == 1,])
+num_female_clients <- data %>% filter(str_detect(PersonalStatus, "female")) %>% count() %>% as.numeric()
+num_male_clients <- data %>% filter(!str_detect(PersonalStatus, "female")) %>% count() %>% as.numeric()
+num_female_default <- data %>% filter(str_detect(PersonalStatus, "female") & Default == T) %>% count() %>% as.numeric()
+num_male_default <- data %>% filter(!str_detect(PersonalStatus, "female") & Default == T) %>% count() %>% as.numeric()
 
-proportion_matrix <- matrix(c(nrow(male_clients)-num_male_default, 
+proportion_matrix <- matrix(c(num_male_clients-num_male_default, 
                             num_male_default,
-                         nrow(female_clients)-num_female_default,
+                         num_female_clients-num_female_default,
                           num_female_default), nrow=2, byrow = T)
 colnames(proportion_matrix) <- c("no_default", "default")
 rownames(proportion_matrix) <- c("male", "female")
@@ -294,8 +329,8 @@ Iz ovoga zaključujemo, na razini značajnosti 0.05, da muškarci ispunjavaju kr
 Provodimo Z-test o dvije proporcije s očekivanjem da će nam dati vrlo slične rezultate kao i $\chi^2$-test.
 
 ```{r}
-n1 <- nrow(male_clients)
-n2 <- nrow(female_clients)
+n1 <- num_male_clients
+n2 <- num_female_clients
 k1 <- n1 - num_male_default
 k2 <- n2 - num_female_default
 
@@ -306,32 +341,19 @@ cat("The p-value of the Z statistic is: ", pnorm(Z_stat))
 Kao što možemo uočiti Z-test nam daje isti zaključak i vrlo sličnu p-vrijednost kao i $\chi^2$-test pa ćemo nadalje koristiti $\chi^2$ jer je on implementiran u R-u.
 
 ```{r}
-Values <- matrix(c((nrow(female_clients)-num_female_default),
-                   (nrow(male_clients)-num_male_default),
-                   num_female_default, 
-                   num_male_default
-                     ), nrow=2, ncol=2, byrow = T)
+df <- data.frame(spol=c("žene", "muškarci", "žene", "muškarci"),
+                 brojevi=c(num_female_default, num_male_default, k2, k1),
+                 default=c("default", "default", "no default", "no default"))
 
-barplot(Values, main="Kvantitativni prikaz", names.arg=c("žene", "muškarci"), xlab="spol", col = c("blue", "orange"))
+ggplot(df, aes(x=spol, y=brojevi, fill=default)) + geom_bar(stat="identity")
 
-legend("topright", inset = c(-0.1, 0), c("no default","default"), fill = c("blue", "orange"))
+g1 <- df %>% filter(spol=="žene") %>% ggplot(aes(x="", y=brojevi, fill=default)) +
+  geom_bar(stat="identity") + coord_polar("y", start=0) + theme_void() + ggtitle("Žene") 
+g2 <- df %>% filter(spol=="muškarci") %>% ggplot(aes(x="", y=brojevi, fill=default)) +
+  geom_bar(stat="identity") + coord_polar("y", start=0) + theme_void() + ggtitle("Muškarci")
+grid.arrange(g2, g1)
 ```
 
-```{r}
-
-Values <- matrix(c((nrow(female_clients)-num_female_default)/nrow(female_clients),
-                   (nrow(male_clients)-num_male_default)/nrow(male_clients),
-                   num_female_default/nrow(female_clients), 
-                   num_male_default/nrow(male_clients)
-                     ), nrow=2, ncol=2, byrow = T)
-
-
-barplot(Values, main="Postotni prikaz", names.arg=c("žene", "muškarci"), xlab="spol", col = c("blue", "orange"))
-
-
-legend("topright", inset = c(-0.1, 0), c("no default","default"), fill = c("blue", "orange"))
-
-```
 
 ### Statistika nad slobodnim muškarcima i ženama u skupu podataka
 
@@ -339,10 +361,10 @@ H0: Proporcija onih koji nisu ispunili obveza naspram onih koji su ispunili obav
 H1: Proporcija osoba koje nisu ispunile obaveze naspram onih koji su ispunili obaveze veća je kod slobodnih muškaraca.
 
 ```{r}
-male_single_clients <- male_clients[str_detect(male_clients$PersonalStatus, "single"),]
-num_male_single_default <- sum(male_single_clients$Default == 1)
+num_male_single <- data %>% filter(str_detect(PersonalStatus, "single")) %>% count() %>% as.numeric()
+num_male_single_default <- data %>% filter(str_detect(PersonalStatus, "single") & Default == T) %>% count() %>% as.numeric()
 
-proportion_matrix[1,] <- c(nrow(male_single_clients) - num_male_single_default,
+proportion_matrix[1,] <- c(num_male_single - num_male_single_default,
                            num_male_single_default)
 # proportion_matrix
 prop.test(proportion_matrix, alternative = "less")
@@ -351,29 +373,21 @@ prop.test(proportion_matrix, alternative = "less")
 Iz ovoga zaključujemo, na razini značajnosti 0.05, da slobodni muškarci ispunjavaju kreditne obveze razmjerno ženama (tj. ne možemo reći da su skloniji neispunjavanju obveza).
 
 ```{r}
-Values <- matrix(c((nrow(female_clients)-num_female_default),
-                   (nrow(male_single_clients)-num_male_single_default),
-                   num_female_default, 
-                   num_male_single_default
-                     ), nrow=2, ncol=2, byrow = T)
+df <- data.frame(spol=c("žene", "muškarci", "žene", "muškarci"),
+                 brojevi=c(num_female_default, num_male_single_default, k2,
+                           num_male_single-num_male_single_default),
+                 default=c("default", "default", "no default", "no default"))
 
-barplot(Values, main="Kvantitativni prikaz", names.arg=c("žene", "slobodni muškarci"), xlab="spol", col = c("blue", "orange"))
+ggplot(df, aes(x=spol, y=brojevi, fill=default)) + geom_bar(stat="identity")
 
-legend("topright", inset = c(-0.1, 0), c("no default","default"), fill = c("blue", "orange"))
+g1 <- df %>% filter(spol=="žene") %>% ggplot(aes(x="", y=brojevi, fill=default)) +
+  geom_bar(stat="identity") + coord_polar("y", start=0) + theme_void() + ggtitle("Žene") 
+g2 <- df %>% filter(spol=="muškarci") %>% ggplot(aes(x="", y=brojevi, fill=default)) +
+  geom_bar(stat="identity") + coord_polar("y", start=0) + theme_void() + ggtitle("Muškarci")
+grid.arrange(g2, g1)
+
 ```
 
-```{r}
-
-Values <- matrix(c((nrow(female_clients)-num_female_default)/nrow(female_clients),
-                   (nrow(male_single_clients)-num_male_single_default)/nrow(male_single_clients),
-                   num_female_default/nrow(female_clients), 
-                   num_male_single_default/nrow(male_single_clients)
-                     ), nrow=2, ncol=2, byrow = T)
-
-barplot(Values, main="Postotni prikaz", names.arg=c("žene", "slobodni muškarci"), xlab="spol", col = c("blue", "orange"))
-
-legend("topright", inset = c(-0.1, 0), c("no default", "default"), fill = c("blue", "orange"))
-```
 
 ### Statistika nad rastavljenim muškarcima i ženama u skupu podataka
 
@@ -381,10 +395,10 @@ H0: Proporcija onih koji nisu ispunili obveza naspram onih koji su ispunili obav
 H1: Proporcija osoba koje nisu ispunile obaveze naspram onih koji su ispunili obaveze veća je kod rastavljenih muškaraca.
 
 ```{r}
-male_divor_clients <- male_clients[str_detect(male_clients$PersonalStatus, "divorced"),]
-num_male_divor_default <- sum(male_divor_clients$Default == 1)
+num_male_divor <- data %>% filter(str_detect(PersonalStatus, "divorced")) %>% count() %>% as.numeric()
+num_male_divor_default <- data %>% filter(str_detect(PersonalStatus, "divorced") & Default == T) %>% count() %>% as.numeric()
 
-proportion_matrix[1,] <- c(nrow(male_divor_clients) - num_male_divor_default,
+proportion_matrix[1,] <- c(num_male_divor - num_male_divor_default,
                            num_male_divor_default)
 # proportion_matrix
 prop.test(proportion_matrix, alternative = "less")
@@ -393,30 +407,22 @@ prop.test(proportion_matrix, alternative = "less")
 Iz ovoga zaključujemo, na razini značajnosti 0.05, da rastavljeni muškarci ispunjavaju kreditne obveze razmjerno ženama (tj. ne možemo reći da su skloniji neispunjavanju obveza).
 
 ```{r}
-Values <- matrix(c((nrow(female_clients)-num_female_default),
-                   (nrow(male_divor_clients)-num_male_divor_default),
-                   num_female_default, 
-                   num_male_divor_default
-                     ), nrow=2, ncol=2, byrow = T)
 
-barplot(Values, main="Kvantitativni prikaz", names.arg=c("žene", "rastavljeni muškarci"), xlab="spol", col = c("blue", "orange"))
+df <- data.frame(spol=c("žene", "muškarci", "žene", "muškarci"),
+                 brojevi=c(num_female_default, num_male_divor_default, k2,
+                           num_male_divor-num_male_divor_default),
+                 default=c("default", "default", "no default", "no default"))
 
-legend("topright", inset = c(-0.1, 0), c("no default", "default"), fill = c("blue", "orange"))
-```
+ggplot(df, aes(x=spol, y=brojevi, fill=default)) + geom_bar(stat="identity")
 
-```{r}
-
-Values <- matrix(c((nrow(female_clients)-num_female_default)/nrow(female_clients),
-                   (nrow(male_divor_clients)-num_male_divor_default)/nrow(male_divor_clients),
-                   num_female_default/nrow(female_clients), 
-                   num_male_divor_default/nrow(male_divor_clients)
-                     ), nrow=2, ncol=2, byrow = T)
-
-barplot(Values, main="Postotni prikaz", names.arg=c("žene", "rastavljeni muškarci"), xlab="spol", col = c("blue", "orange"))
-
-legend("topright", inset = c(-0.1, 0), c("no default", "default"), fill = c("blue", "orange"))
+g1 <- df %>% filter(spol=="žene") %>% ggplot(aes(x="", y=brojevi, fill=default)) +
+  geom_bar(stat="identity") + coord_polar("y", start=0) + theme_void() + ggtitle("Žene") 
+g2 <- df %>% filter(spol=="muškarci") %>% ggplot(aes(x="", y=brojevi, fill=default)) +
+  geom_bar(stat="identity") + coord_polar("y", start=0) + theme_void() + ggtitle("Muškarci")
+grid.arrange(g2, g1)
 
 ```
+
 
 ### Statistika nad oženjenim muškarcima i ženama u skupu podataka
 
@@ -424,10 +430,10 @@ H0: Proporcija onih koji nisu ispunili obveza naspram onih koji su ispunili obav
 H1: Proporcija osoba koje nisu ispunile obaveze naspram onih koji su ispunili obaveze veća je kod oženjenih muškaraca.
 
 ```{r}
-male_married_clients <- male_clients[str_detect(male_clients$PersonalStatus, "married"),]
-num_male_married_default <- sum(male_married_clients$Default == 1)
+num_male_married <- data %>% filter(str_detect(PersonalStatus, "widowed")) %>% count() %>% as.numeric()
+num_male_married_default <- data %>% filter(str_detect(PersonalStatus, "widowed") & Default == T) %>% count() %>% as.numeric()
 
-proportion_matrix[1,] <- c(nrow(male_married_clients) - num_male_married_default,
+proportion_matrix[1,] <- c(num_male_married - num_male_married_default,
                            num_male_married_default)
 # proportion_matrix
 prop.test(proportion_matrix, alternative = "less")
@@ -436,29 +442,20 @@ prop.test(proportion_matrix, alternative = "less")
 Iz ovoga zaključujemo, na razini značajnosti 0.05, da oženjeni muškarci ispunjavaju kreditne obveze razmjerno ženama (tj. ne možemo reći da su skloniji neispunjavanju obveza).
 
 ```{r}
-Values <- matrix(c((nrow(female_clients)-num_female_default),
-                   (nrow(male_married_clients)-num_male_married_default),
-                   num_female_default, 
-                   num_male_married_default
-                     ), nrow=2, ncol=2, byrow = T)
+df <- data.frame(spol=c("žene", "muškarci", "žene", "muškarci"),
+                 brojevi=c(num_female_default, num_male_married_default, k2,
+                           num_male_married-num_male_married_default),
+                 default=c("default", "default", "no default", "no default"))
 
-barplot(Values, main="Kvantitativni prikaz", names.arg=c("žene", "oženjeni muškarci"), xlab="spol", col = c("blue", "orange"))
+ggplot(df, aes(x=spol, y=brojevi, fill=default)) + geom_bar(stat="identity")
 
-legend("topright", inset = c(-0.1, 0), c("no default", "default"), fill = c("blue", "orange"))
+g1 <- df %>% filter(spol=="žene") %>% ggplot(aes(x="", y=brojevi, fill=default)) +
+  geom_bar(stat="identity") + coord_polar("y", start=0) + theme_void() + ggtitle("Žene") 
+g2 <- df %>% filter(spol=="muškarci") %>% ggplot(aes(x="", y=brojevi, fill=default)) +
+  geom_bar(stat="identity") + coord_polar("y", start=0) + theme_void() + ggtitle("Muškarci")
+grid.arrange(g2, g1)
 ```
 
-```{r}
-
-Values <- matrix(c((nrow(female_clients)-num_female_default)/nrow(female_clients),
-                   (nrow(male_married_clients)-num_male_married_default)/nrow(male_married_clients),
-                   num_female_default/nrow(female_clients), 
-                   num_male_married_default/nrow(male_married_clients)
-                     ), nrow=2, ncol=2, byrow = T)
-
-barplot(Values, main="Postotni udio", names.arg=c("žene", "oženjeni muškarci"), xlab="spol", col = c("blue", "orange"))
-
-legend("topright", inset = c(-0.1, 0), c("no default", "default"), fill = c("blue", "orange"))
-```
 
 ## 3. pitanje: Postoje li razlike u traženom iznosu kredita prema imovini klijenta?
 
@@ -474,9 +471,20 @@ c("real estate", "building society savings agreement/ life insurance",
     numbers
   }) -> Prop_category
 
-boxplot(Prop_category, names=c("real estate", "life insurance", "unknown", "car"))
 
-for(x in 1:length(Prop_category)) {
-  hist(Prop_category[[x]], main = str_c("Histogram of ", names(Prop_category)[x]), xlab="Credit Amount")
-}
+ggplot(data, aes(x=Property, y=CreditAmount)) + geom_boxplot() 
+
+qqnorm(Prop_category$`real estate`)
+qqline(Prop_category$`real estate`)
+qqnorm(Prop_category$`building society savings agreement/ life insurance`)
+qqline(Prop_category$`building society savings agreement/ life insurance`)
+qqnorm(Prop_category$`unknown / no property`)
+qqline(Prop_category$`unknown / no property`)
+qqnorm(Prop_category$`car or other, not in attribute Account`)
+qqline(Prop_category$`car or other, not in attribute Account`)
+
+
+a = aov(data$CreditAmount ~ data$Property)
+summary(a)
+
 ```
