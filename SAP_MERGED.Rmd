@@ -293,6 +293,9 @@ recall
 
 specificity
 ```
+```{r}
+anova(logreg.mdl, logreg.mdl2, test = "LRT")
+```
 
 
 
