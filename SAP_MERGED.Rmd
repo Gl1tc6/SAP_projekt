@@ -16,6 +16,7 @@ library(tidyr)
 library(dplyr)
 library(ggplot2)
 library(caret)
+library(nortest)
 library(gridExtra)
 ```
 
@@ -263,7 +264,7 @@ recall
 specificity
 ```
 ```{r}
-logreg.mdl2 <- glm(Default ~ as.numeric(AccountStatus) + Duration + as.numeric(CreditHistory) + Purpose + CreditAmount + as.numeric(EmploymentSince) + as.numeric(PercentOfIncome) + as.numeric(Property)+ Age + OtherInstallPlans + Telephone + ForeignWorker, data = data, family = binomial())
+logreg.mdl2 <- glm(Default ~ as.numeric(AccountStatus) + Duration + as.numeric(CreditHistory) + Purpose + CreditAmount + as.numeric(EmploymentSince) + as.numeric(PercentOfIncome) + as.numeric(Property)+ Age + OtherInstallPlans + Telephone, data = data, family = binomial())
 summary(logreg.mdl2)
 ```
 
@@ -471,11 +472,12 @@ c("real estate", "building society savings agreement/ life insurance",
     print(summary(numbers))
     str_c(x, " standard deviation: ", sd(numbers), "\n") %>% cat()
     cat("-------------------------------------------\n")
-    numbers
+    log10(numbers)
   }) -> Prop_category
 
 
-ggplot(data, aes(x=Property, y=CreditAmount)) + geom_boxplot() 
+
+boxplot(Prop_category)
 
 qqnorm(Prop_category$`real estate`)
 qqline(Prop_category$`real estate`)
