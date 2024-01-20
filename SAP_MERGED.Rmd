@@ -22,9 +22,11 @@ library(gridExtra)
 
 # Uvod
 
-U našem projektu obrađujemo veliki skup podataka kreditnog stanja korisnika neke banke. Naš je zadatak procijentiti koji čimbenici utječu na sposobnost otplate kredita u zadanome roku.
+U našem projektu obrađujemo veliki skup podataka kreditnog stanja korisnika neke banke. Zadatak nam je procijentiti koji čimbenici utječu na sposobnost otplate kredita u zadanome roku.
 
 ## Skup podataka - statistika
+
+Za početak ćemo ispisati neke deskriptivne vrijednosti o skupu podataka. Ispisujemo broj nedostajućih vrijednosti te broj vrijednosti svake kategorije za kategoričke podatke, odnosno medijan, aritmetičku sredinu i kvartile za numeričke podatke. Osim toga, kategoričke vrijednosti odmah faktoriziramo, što će nam olakšati rad s njima pri provedbi testova.
 
 ```{r}
 data <- read.csv("procjena_kreditnog_rizika.csv")
@@ -157,10 +159,13 @@ data$Default <- factor(
 summary(data)
 ```
 
-Vidimo da je skup poprilično čist (nema nedostajućih vrijednosti). Iako bi neki stupci moguće bili korisniji da su numerički prije nego kategorički.
+Vidimo da je skup podataka poprilično čist (nema nedostajućih vrijednosti), iako bi neki stupci pri analizi vjerojatno bili korisniji da su numerički, a ne kategorički (primjerice, AccountStatus).
 
+## Vizualizacija podataka
 
-## Uvodni grafovi
+Vizualizirat ćemo podatke kako bismo dobili bolji dojam o njihovoj strukturi i raspodjeli.
+
+Iz donjeg box-plota vidimo da se većina podataka nalazi u rasponu od oko 2000 do oko 4000 eura. Vrijednosti veće od 8000 eura možemo smatrati ekstremima.
 
 ```{r}
 threshold <- quantile(data$CreditAmount, 0.99)  # Set threshold at 99th percentile
@@ -169,6 +174,8 @@ filtered_data <- subset(data, CreditAmount <= threshold)
 boxplot(filtered_data$CreditAmount, main="Kredit", ylab="Iznos kredita u €")
 points(mean(filtered_data$CreditAmount), col = "red")
 ```
+
+Iz histograma iznosa kredita vidimo da je distribucija iznosa kredita nagnuta ulijevo. Većina uzima kredite iznosa manjeg od 2300 eura.
 
 ```{r}
 threshold <- quantile(data$CreditAmount, 0.99)  # Set threshold at 99th percentile
@@ -187,6 +194,8 @@ abline(v = mean(filtered_data$CreditAmount), col = "orange", lwd=5, lty=10)
 abline(v = median(filtered_data$CreditAmount), col= "red", lwd=5)
 ```
 
+Na sljedećem grafu grafički je prikazano kolike su frekvencije postotka rate kredita osobe u odnosu na njezin dohodak. Najveći dio ljudi uzima kredite iznosa manjeg od 20% njihovog dohotka.
+
 ```{r}
 
 # Create a bar plot
@@ -204,40 +213,48 @@ print(bar_plot)
 
 ## 1.pitanje: Možemo li temeljem drugih dostupnih varijabli predvidjeti hoće li nastupiti *default* za određenog klijenta? Koje varijable povećavaju tu vjerojatnost?
 
-Primjeren način za odgovoriti na ovo pitanje je razavoj dobrog modela logističke regresije. Kako bi dobili nekakvu okvirnu sliku o međuovisnostima naših regresora valjalo bi dobiti korelacijsku matricu.
+Na ovo pitanje odgovor ćemo dobiti razvojem dobrog modela logističke regresije. Kako bismo dobili okvirnu sliku o međuovisnostima naših regresora izračunavamo korelacijsku matricu.
 
 ```{r}
 cor_matrix <- cor(sapply(data, as.numeric))
 # cor_matrix
 ```
 
-Budući je izlaz u R-u nepregledan predočit ćemo koeficijente varijable čija je apsolutna vrijednost veća od 0.3. Varijable kod kojih dolazi do takvih korelacija su sljedeće:
+Budući da je izlaz u R-u nepregledan predočit ćemo koeficijente varijabli čija je apsolutna vrijednost veća od 0.3. Varijable kod kojih dolazi do takvih korelacija su sljedeće:
 
 Duration i CreditAmount
+
 ```{r}
 cor_matrix["Duration", "CreditAmount"]
 ```
 
 CreditHistory i NumExistingCredits
+
 ```{r}
 cor_matrix["CreditHistory", "NumExistingCredits"]
 ```
 
 ResidenceSince i Housing
+
 ```{r}
 cor_matrix["ResidenceSince","Housing"]
 ```
+
 Property i Housing
+
 ```{r}
 cor_matrix["Property", "Housing"]
 ```
 
+Sada obavljamo logističku regresiju. Default nam je zavisna varijabla, a sve varijable nakon znaka ~ su nezavnisne (AccountStatus, CreditHistory, itd.). Nakon treniranja ispisan je sažetak modela.
 ```{r}
 logreg.mdl <- glm(Default ~ as.numeric(AccountStatus) + Duration + as.numeric(CreditHistory) + Purpose + CreditAmount + as.numeric(Account) + as.numeric(EmploymentSince) + as.numeric(PercentOfIncome) + PersonalStatus + OtherDebtors + as.numeric(ResidenceSince) + as.numeric(Property) + Age + OtherInstallPlans + Housing + as.numeric(NumExistingCredits) + as.numeric(Job) + as.numeric(NumberOfDependents) + Telephone + ForeignWorker, data = data, family = binomial())
 summary(logreg.mdl)
 ```
 
-Sad ćemo razmotriti neke od mjera kvalitete modela.
+Potom razmatramo neke od mjera kvalitete modela.
+
+Prvo ispisujemo matricu konfuzije (engl. confusion matrix) u kojoj su prikazana točna predviđanja te brojevi pogreški prve i druge vrste. Vidimo da postoji velik broj pogrešaka druge vrste (njih 187).
 
 ```{r}
 Rsq = 1 - logreg.mdl$deviance/logreg.mdl$null.deviance
@@ -249,6 +266,7 @@ tab <- table(data$Default, Ypredicted)
 tab
 ```
 
+Zatim ispisujemo i ostale mjere kvalitete modela: točnost, preciznost, recall i specifičnost.
 ```{r}
 accuracy = sum(diag(tab)) / sum(tab)
 precision = tab[2,2] / sum(tab[,2])
@@ -263,12 +281,14 @@ recall
 
 specificity
 ```
+Smanjenjem parametara logističke regresije često možemo poboljšati njezinu učinkovitost. Stoga sada treniramo novi model s parametrima koji su bili statistički značajni na razini većoj od 0,05.
+
 ```{r}
 logreg.mdl2 <- glm(Default ~ as.numeric(AccountStatus) + Duration + as.numeric(CreditHistory) + Purpose + CreditAmount + as.numeric(EmploymentSince) + as.numeric(PercentOfIncome) + as.numeric(Property)+ Age + OtherInstallPlans + Telephone, data = data, family = binomial())
 summary(logreg.mdl2)
 ```
 
-
+Ponovno ispisujemo matricu konfuzije i još uvijek vidimo relativno veliku pogrešku druge vrste.
 ```{r}
 Rsq = 1 - logreg.mdl2$deviance/logreg.mdl$null.deviance
 Rsq
@@ -279,7 +299,7 @@ tab <- table(data$Default, Ypredicted)
 tab
 ```
 
-
+Zatim izračunavamo i ostale mjere kvalitete modela, kao i za prethodni model
 ```{r}
 accuracy = sum(diag(tab)) / sum(tab)
 precision = tab[2,2] / sum(tab[,2])
@@ -294,11 +314,10 @@ recall
 
 specificity
 ```
+
 ```{r}
 anova(logreg.mdl, logreg.mdl2, test = "LRT")
 ```
-
-
 
 ## 2.pitanje: Jesu li muškarci skloniji neispunjavanju obveza po kreditu od žena?
 
@@ -328,7 +347,7 @@ prop.test(proportion_matrix, alternative = "less")
 
 ```
 
-Iz ovoga zaključujemo, na razini značajnosti 0.05, da muškarci ispunjavaju kreditne obveze razmjerno ženama (tj. ne možemo reći da su skloniji neispunjavanju obveza).
+Iz ovoga zaključujemo na razini značajnosti 0.05, da muškarci ispunjavaju kreditne obveze razmjerno ženama (tj. ne možemo reći da su skloniji neispunjavanju obveza).
 
 Provodimo Z-test o dvije proporcije s očekivanjem da će nam dati vrlo slične rezultate kao i $\chi^2$-test.
 
@@ -357,7 +376,6 @@ g2 <- df %>% filter(spol=="muškarci") %>% ggplot(aes(x="", y=brojevi, fill=defa
   geom_bar(stat="identity") + coord_polar("y", start=0) + theme_void() + ggtitle("Muškarci")
 grid.arrange(g2, g1)
 ```
-
 
 ### Statistika nad slobodnim muškarcima i ženama u skupu podataka
 
@@ -391,7 +409,6 @@ g2 <- df %>% filter(spol=="muškarci") %>% ggplot(aes(x="", y=brojevi, fill=defa
 grid.arrange(g2, g1)
 
 ```
-
 
 ### Statistika nad rastavljenim muškarcima i ženama u skupu podataka
 
@@ -427,7 +444,6 @@ grid.arrange(g2, g1)
 
 ```
 
-
 ### Statistika nad oženjenim muškarcima i ženama u skupu podataka
 
 H0: Proporcija onih koji nisu ispunili obveza naspram onih koji su ispunili obaveze jednaka je kod oženjenih muškaraca i žena (ili je manja kod oženjenih muškaraca).\
@@ -459,7 +475,6 @@ g2 <- df %>% filter(spol=="muškarci") %>% ggplot(aes(x="", y=brojevi, fill=defa
   geom_bar(stat="identity") + coord_polar("y", start=0) + theme_void() + ggtitle("Muškarci")
 grid.arrange(g2, g1)
 ```
-
 
 ## 3. pitanje: Postoje li razlike u traženom iznosu kredita prema imovini klijenta?
 
