@@ -246,7 +246,8 @@ Property i Housing
 cor_matrix["Property", "Housing"]
 ```
 
-Sada obavljamo logističku regresiju. Default nam je zavisna varijabla, a sve varijable nakon znaka ~ su nezavnisne (AccountStatus, CreditHistory, itd.). Nakon treniranja ispisan je sažetak modela.
+Sada obavljamo logističku regresiju. Default nam je zavisna varijabla, a sve varijable nakon znaka \~ su nezavnisne (AccountStatus, CreditHistory, itd.). Nakon treniranja ispisan je sažetak modela.
+
 ```{r}
 logreg.mdl <- glm(Default ~ as.numeric(AccountStatus) + Duration + as.numeric(CreditHistory) + Purpose + CreditAmount + as.numeric(Account) + as.numeric(EmploymentSince) + as.numeric(PercentOfIncome) + PersonalStatus + OtherDebtors + as.numeric(ResidenceSince) + as.numeric(Property) + Age + OtherInstallPlans + Housing + as.numeric(NumExistingCredits) + as.numeric(Job) + as.numeric(NumberOfDependents) + Telephone + ForeignWorker, data = data, family = binomial())
 summary(logreg.mdl)
@@ -267,6 +268,7 @@ tab
 ```
 
 Zatim ispisujemo i ostale mjere kvalitete modela: točnost, preciznost, recall i specifičnost.
+
 ```{r}
 accuracy = sum(diag(tab)) / sum(tab)
 precision = tab[2,2] / sum(tab[,2])
@@ -281,7 +283,8 @@ recall
 
 specificity
 ```
-Smanjenjem parametara logističke regresije često možemo poboljšati njezinu učinkovitost. Stoga sada treniramo novi model s parametrima koji su bili statistički značajni na razini većoj od 0,05.
+
+Trenutni model logističke regresije ima jako puno parametara, čime otvaramo mogućnost za prenaučenost. Da bismo to spriječili, smanjujemo broj nezavisnih varijabli koristeći samo one koje su u prethodnom modelu bile statistički značajne na razini značajnosti 0,05.
 
 ```{r}
 logreg.mdl2 <- glm(Default ~ as.numeric(AccountStatus) + Duration + as.numeric(CreditHistory) + Purpose + CreditAmount + as.numeric(EmploymentSince) + as.numeric(PercentOfIncome) + as.numeric(Property)+ Age + OtherInstallPlans + Telephone, data = data, family = binomial())
@@ -289,6 +292,7 @@ summary(logreg.mdl2)
 ```
 
 Ponovno ispisujemo matricu konfuzije i još uvijek vidimo relativno veliku pogrešku druge vrste.
+
 ```{r}
 Rsq = 1 - logreg.mdl2$deviance/logreg.mdl$null.deviance
 Rsq
@@ -300,6 +304,7 @@ tab
 ```
 
 Zatim izračunavamo i ostale mjere kvalitete modela, kao i za prethodni model
+
 ```{r}
 accuracy = sum(diag(tab)) / sum(tab)
 precision = tab[2,2] / sum(tab[,2])
@@ -478,6 +483,50 @@ grid.arrange(g2, g1)
 
 ## 3. pitanje: Postoje li razlike u traženom iznosu kredita prema imovini klijenta?
 
+Za odgovaranje na ovo pitanje koristimo ANOVA metodu. ANOVA zahtjeva normalnost podataka, stoga prvo obavljamo testove na normalnost i crtamo Q-Q plotove.
+
+```{r}
+require(nortest)
+
+lillie.test(data$CreditAmount)
+
+lillie.test(data$CreditAmount[data$Property=='real estate'])
+lillie.test(data$CreditAmount[data$Property=='building society savings agreement/ life insurance'])
+lillie.test(data$CreditAmount[data$Property=='unknown / no property'])
+lillie.test(data$CreditAmount[data$Property=='car or other, not in attribute Account'])
+```
+
+```{r}
+c("real estate", "building society savings agreement/ life insurance",
+  "unknown / no property", "car or other, not in attribute Account") %>% 
+  sapply(function(x) {
+    filter(data, Property==x) %>% pull(CreditAmount) -> numbers
+    str_c(x, " n: ", length(numbers), "\n") %>% cat()
+    print(summary(numbers))
+    str_c(x, " standard deviation: ", sd(numbers), "\n") %>% cat()
+    cat("-------------------------------------------\n")
+    numbers
+  }) -> Prop_category
+
+
+
+ggplot(data, aes(x=Property, y=CreditAmount)) + geom_boxplot()
+
+
+
+qqnorm(Prop_category$`real estate`)
+qqline(Prop_category$`real estate`)
+qqnorm(Prop_category$`building society savings agreement/ life insurance`)
+qqline(Prop_category$`building society savings agreement/ life insurance`)
+qqnorm(Prop_category$`unknown / no property`)
+qqline(Prop_category$`unknown / no property`)
+qqnorm(Prop_category$`car or other, not in attribute Account`)
+qqline(Prop_category$`car or other, not in attribute Account`)
+
+```
+
+Nakon provođenja testova i crtanja Q-Q plotova, zaključujemo da podatci nisu normalni te da s takvim podatcima ne bismo trebali raditi analizu varijance. Stoga na vrijednostima obavljamo logaritamsku transformaciju nakon čega se iz Q-Q plotova jasno uvjeravamo u normalnost.
+
 ```{r}
 c("real estate", "building society savings agreement/ life insurance",
   "unknown / no property", "car or other, not in attribute Account") %>% 
@@ -503,8 +552,15 @@ qqline(Prop_category$`unknown / no property`)
 qqnorm(Prop_category$`car or other, not in attribute Account`)
 qqline(Prop_category$`car or other, not in attribute Account`)
 
+```
 
+Sada provodimo analizu varijance, čije su hipoteze sljedeće:\
+H0: Srednja vrijednost varijable "CreditAmount" jednaka je za sve kategorije varijable "Property", tj. ne postoje razlike u traženom iznosu kredita prema imovini klijenta.\
+H1: Srednja vrijednost varijable "CreditAmount" nije jednaka za barem dvije varijable "Property", tj. postoje razlike u traženom iznosu kredita prema imovini klijenta.
+
+```{r}
 a = aov(data$CreditAmount ~ data$Property)
 summary(a)
-
 ```
+
+Test nam kao rezultat daje p-vrijednost \<2e-16, na temelju čega odbacujemo nultu hipotezu u korist alternativne. Zaključujemo da postoji razlika u traženom iznosu kredita prema imovini klijenta. Takav rezultat i grafički možemo vidjeti na box-plotovima, gdje se vidi značajna razlika traženog iznosa između kategorija "real estate" i "unknown / no property".
