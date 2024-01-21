@@ -194,6 +194,11 @@ abline(v = mean(filtered_data$CreditAmount), col = "orange", lwd=5, lty=10)
 abline(v = median(filtered_data$CreditAmount), col= "red", lwd=5)
 ```
 
+```{r}
+mean(filtered_data$CreditAmount)
+median(filtered_data$CreditAmount)
+```
+
 Na sljedećem grafu grafički je prikazano kolike su frekvencije postotka rate kredita osobe u odnosu na njezin dohodak. Najveći dio ljudi uzima kredite iznosa manjeg od 20% njihovog dohotka.
 
 ```{r}
@@ -207,6 +212,22 @@ bar_plot <- ggplot(data, aes(x = PercentOfIncome)) +
 
 # Print the plot
 print(bar_plot)
+```
+
+Iz sljedećih grafova vidimo da postoji blaga pozitivna korelacija iznosa kredita u odnosu na trajanje njegove otplate.
+
+```{r}
+plot(data$CreditAmount, data$Duration,
+     col="blue",
+     xlab='Trajanje otplate kredita',
+     ylab='Iznos kredita',
+     main='Iznos kredita u odnosu na trajanje njegove otplate')
+
+plot(data$Age, data$CreditAmount,
+     col="blue",
+     xlab='Dob klijenta',
+     ylab='Iznos kredita',
+     main='Iznos kredita u odnosu na dob klijenta')
 ```
 
 # TESTOVI
@@ -330,12 +351,29 @@ anova(logreg.mdl, logreg.mdl2, test = "LRT")
 
 U ovom odsječku uspoređujemo odnos između dviju kategorijskih varijabli (spol, izvršavanje svojih novčanih obveza). Uspoređivat ćemo je li kod muškaraca i žena jednaka proporcija onih koji nisu izvršili svoje novčane obaveze (default).
 
-Sve statistike provjeravamo na razina značajnosti $\alpha$ = 0.05. Ispitujemo jednostranu alternativu (neispunjavanje obveza je češće kod muškaraca).
+Sve statistike provjeravamo na razini značajnosti $\alpha$ = 0.05.
 
 ### Statistika nad svim muškarcima i ženama u skupu podataka
 
-H0: Proporcija onih koji nisu ispunili obveza naspram onih koji su ispunili obaveze jednaka je kod muškaraca i žena (ili je manja kod muškaraca).\
-H1: Proporcija osoba koje nisu ispunile obaveze naspram onih koji su ispunili obaveze veća je kod muškaraca.
+```{r}
+df <- data.frame(spol=c("žene", "muškarci", "žene", "muškarci"),
+                 brojevi=c(num_female_default, num_male_default, k2, k1),
+                 default=c("default", "default", "no default", "no default"))
+
+ggplot(df, aes(x=spol, y=brojevi, fill=default)) + geom_bar(stat="identity")
+
+g1 <- df %>% filter(spol=="žene") %>% ggplot(aes(x="", y=brojevi, fill=default)) +
+  geom_bar(stat="identity") + coord_polar("y", start=0) + theme_void() + ggtitle("Žene") 
+g2 <- df %>% filter(spol=="muškarci") %>% ggplot(aes(x="", y=brojevi, fill=default)) +
+  geom_bar(stat="identity") + coord_polar("y", start=0) + theme_void() + ggtitle("Muškarci")
+grid.arrange(g2, g1)
+```
+Iz grafova vidimo da je proporcija osoba koje su defaultale veća kod žena nego kod muškaraca. Stoga provodimo statističke testove nastojeći provjeriti je li ta razlika statistički značajna.
+
+Prvo provodimo test o proporciji sa sljedećim pretpostavkama.
+
+H0: Proporcija onih koji nisu defaultali naspram onih koji jesu jednaka je kod muškaraca i žena (ili je manja kod muškaraca).\
+H1: Proporcija osoba koje nisu defaultali naspram onih koje jesu veća je kod muškaraca.
 
 ```{r}
 num_female_clients <- data %>% filter(str_detect(PersonalStatus, "female")) %>% count() %>% as.numeric()
@@ -350,11 +388,11 @@ proportion_matrix <- matrix(c(num_male_clients-num_male_default,
 colnames(proportion_matrix) <- c("no_default", "default")
 rownames(proportion_matrix) <- c("male", "female")
 # proportion_matrix
-prop.test(proportion_matrix, alternative = "less")
+prop.test(proportion_matrix, alternative = "greater")
 
 ```
 
-Iz ovoga zaključujemo na razini značajnosti 0.05, da muškarci ispunjavaju kreditne obveze razmjerno ženama (tj. ne možemo reći da su skloniji neispunjavanju obveza).
+Navedeni test rezultirao je s p-vrijednosti približno 0.01 iz čega na razini značajnosti 0.05 odbijamo H0 u korist H1, tj. zaključujemo da su žene sklonije neispunjavanju obaveza nego muškarci.
 
 Provodimo Z-test o dvije proporcije s očekivanjem da će nam dati vrlo slične rezultate kao i $\chi^2$-test.
 
@@ -370,36 +408,7 @@ cat("The p-value of the Z statistic is: ", pnorm(Z_stat))
 
 Kao što možemo uočiti Z-test nam daje isti zaključak i vrlo sličnu p-vrijednost kao i $\chi^2$-test pa ćemo nadalje koristiti $\chi^2$ jer je on implementiran u R-u.
 
-```{r}
-df <- data.frame(spol=c("žene", "muškarci", "žene", "muškarci"),
-                 brojevi=c(num_female_default, num_male_default, k2, k1),
-                 default=c("default", "default", "no default", "no default"))
-
-ggplot(df, aes(x=spol, y=brojevi, fill=default)) + geom_bar(stat="identity")
-
-g1 <- df %>% filter(spol=="žene") %>% ggplot(aes(x="", y=brojevi, fill=default)) +
-  geom_bar(stat="identity") + coord_polar("y", start=0) + theme_void() + ggtitle("Žene") 
-g2 <- df %>% filter(spol=="muškarci") %>% ggplot(aes(x="", y=brojevi, fill=default)) +
-  geom_bar(stat="identity") + coord_polar("y", start=0) + theme_void() + ggtitle("Muškarci")
-grid.arrange(g2, g1)
-```
-
 ### Statistika nad slobodnim muškarcima i ženama u skupu podataka
-
-H0: Proporcija onih koji nisu ispunili obveza naspram onih koji su ispunili obaveze jednaka je kod slobodnih muškaraca i žena (ili je manja kod slobodnih muškaraca).\
-H1: Proporcija osoba koje nisu ispunile obaveze naspram onih koji su ispunili obaveze veća je kod slobodnih muškaraca.
-
-```{r}
-num_male_single <- data %>% filter(str_detect(PersonalStatus, "single")) %>% count() %>% as.numeric()
-num_male_single_default <- data %>% filter(str_detect(PersonalStatus, "single") & Default == T) %>% count() %>% as.numeric()
-
-proportion_matrix[1,] <- c(num_male_single - num_male_single_default,
-                           num_male_single_default)
-# proportion_matrix
-prop.test(proportion_matrix, alternative = "less")
-```
-
-Iz ovoga zaključujemo, na razini značajnosti 0.05, da slobodni muškarci ispunjavaju kreditne obveze razmjerno ženama (tj. ne možemo reći da su skloniji neispunjavanju obveza).
 
 ```{r}
 df <- data.frame(spol=c("žene", "muškarci", "žene", "muškarci"),
@@ -412,27 +421,27 @@ ggplot(df, aes(x=spol, y=brojevi, fill=default)) + geom_bar(stat="identity")
 g1 <- df %>% filter(spol=="žene") %>% ggplot(aes(x="", y=brojevi, fill=default)) +
   geom_bar(stat="identity") + coord_polar("y", start=0) + theme_void() + ggtitle("Žene") 
 g2 <- df %>% filter(spol=="muškarci") %>% ggplot(aes(x="", y=brojevi, fill=default)) +
-  geom_bar(stat="identity") + coord_polar("y", start=0) + theme_void() + ggtitle("Muškarci")
+  geom_bar(stat="identity") + coord_polar("y", start=0) + theme_void() + ggtitle("Slobodni muškarci")
 grid.arrange(g2, g1)
 
 ```
 
-### Statistika nad rastavljenim muškarcima i ženama u skupu podataka
-
-H0: Proporcija onih koji nisu ispunili obveza naspram onih koji su ispunili obaveze jednaka je kod rastavljenih muškaraca i žena (ili je manja kod rastavljenih muškaraca).\
-H1: Proporcija osoba koje nisu ispunile obaveze naspram onih koji su ispunili obaveze veća je kod rastavljenih muškaraca.
+H0: Proporcija onih koji nisu defaultali naspram onih koji jesu jednaka je kod slobodnih muškaraca i žena (ili je manja kod slobodnih muškaraca).\
+H1: Proporcija osoba koje nisu defaultale naspram onih koje jesu veća je kod slobodnih muškaraca.
 
 ```{r}
-num_male_divor <- data %>% filter(str_detect(PersonalStatus, "divorced")) %>% count() %>% as.numeric()
-num_male_divor_default <- data %>% filter(str_detect(PersonalStatus, "divorced") & Default == T) %>% count() %>% as.numeric()
+num_male_single <- data %>% filter(str_detect(PersonalStatus, "single")) %>% count() %>% as.numeric()
+num_male_single_default <- data %>% filter(str_detect(PersonalStatus, "single") & Default == T) %>% count() %>% as.numeric()
 
-proportion_matrix[1,] <- c(num_male_divor - num_male_divor_default,
-                           num_male_divor_default)
+proportion_matrix[1,] <- c(num_male_single - num_male_single_default,
+                           num_male_single_default)
 # proportion_matrix
-prop.test(proportion_matrix, alternative = "less")
+prop.test(proportion_matrix, alternative = "greater")
 ```
 
-Iz ovoga zaključujemo, na razini značajnosti 0.05, da rastavljeni muškarci ispunjavaju kreditne obveze razmjerno ženama (tj. ne možemo reći da su skloniji neispunjavanju obveza).
+S obzirom da je p-vrijednost 0.005, na razini značajnosti 0.05 odbijamo H0 u korist H1, tj. zaključujemo da su žene sklonije neispunjavanju kreditnih obaveza od slobodnih muškaraca. 
+
+### Statistika nad rastavljenim muškarcima i ženama u skupu podataka
 
 ```{r}
 
@@ -446,27 +455,29 @@ ggplot(df, aes(x=spol, y=brojevi, fill=default)) + geom_bar(stat="identity")
 g1 <- df %>% filter(spol=="žene") %>% ggplot(aes(x="", y=brojevi, fill=default)) +
   geom_bar(stat="identity") + coord_polar("y", start=0) + theme_void() + ggtitle("Žene") 
 g2 <- df %>% filter(spol=="muškarci") %>% ggplot(aes(x="", y=brojevi, fill=default)) +
-  geom_bar(stat="identity") + coord_polar("y", start=0) + theme_void() + ggtitle("Muškarci")
+  geom_bar(stat="identity") + coord_polar("y", start=0) + theme_void() + ggtitle("Rastavljeni muškarci")
 grid.arrange(g2, g1)
 
 ```
+Iako su ove dvije proporcije vizualno gotovo identične, svejedno provodimo test o proporciji kako bismo provjerili statističku značajnost.
 
-### Statistika nad oženjenim muškarcima i ženama u skupu podataka
-
-H0: Proporcija onih koji nisu ispunili obveza naspram onih koji su ispunili obaveze jednaka je kod oženjenih muškaraca i žena (ili je manja kod oženjenih muškaraca).\
-H1: Proporcija osoba koje nisu ispunile obaveze naspram onih koji su ispunili obaveze veća je kod oženjenih muškaraca.
+H0: Proporcija onih koji nisu defaultali naspram onih koji jesu jednaka je kod rastavljenih muškaraca i žena (ili je manja kod rastavljenih muškaraca).\
+H1: Proporcija osoba koje nisu defaultale naspram onih koje jesu veća je kod rastavljenih muškaraca.
 
 ```{r}
-num_male_married <- data %>% filter(str_detect(PersonalStatus, "widowed")) %>% count() %>% as.numeric()
-num_male_married_default <- data %>% filter(str_detect(PersonalStatus, "widowed") & Default == T) %>% count() %>% as.numeric()
+num_male_divor <- data %>% filter(str_detect(PersonalStatus, "divorced")) %>% count() %>% as.numeric()
+num_male_divor_default <- data %>% filter(str_detect(PersonalStatus, "divorced") & Default == T) %>% count() %>% as.numeric()
 
-proportion_matrix[1,] <- c(num_male_married - num_male_married_default,
-                           num_male_married_default)
+proportion_matrix[1,] <- c(num_male_divor - num_male_divor_default,
+                           num_male_divor_default)
 # proportion_matrix
-prop.test(proportion_matrix, alternative = "less")
+prop.test(proportion_matrix, alternative = "greater")
 ```
 
-Iz ovoga zaključujemo, na razini značajnosti 0.05, da oženjeni muškarci ispunjavaju kreditne obveze razmjerno ženama (tj. ne možemo reći da su skloniji neispunjavanju obveza).
+Pošto je p-vrijednost testa 0.54, iz ovoga na razini značajnosti 0.05 ne odbacujemo H0 u korist H1, tj. kažemo da rastavljeni muškarci ispunjavaju kreditne obveze razmjerno ženama (ne možemo reći da su skloniji ispunjavanju obveza).
+
+
+### Statistika nad oženjenim muškarcima i ženama u skupu podataka
 
 ```{r}
 df <- data.frame(spol=c("žene", "muškarci", "žene", "muškarci"),
@@ -479,9 +490,26 @@ ggplot(df, aes(x=spol, y=brojevi, fill=default)) + geom_bar(stat="identity")
 g1 <- df %>% filter(spol=="žene") %>% ggplot(aes(x="", y=brojevi, fill=default)) +
   geom_bar(stat="identity") + coord_polar("y", start=0) + theme_void() + ggtitle("Žene") 
 g2 <- df %>% filter(spol=="muškarci") %>% ggplot(aes(x="", y=brojevi, fill=default)) +
-  geom_bar(stat="identity") + coord_polar("y", start=0) + theme_void() + ggtitle("Muškarci")
+  geom_bar(stat="identity") + coord_polar("y", start=0) + theme_void() + ggtitle("Oženjeni muškarci")
 grid.arrange(g2, g1)
 ```
+Ovdje vidimo veću sklonost žena za neispunjavanje kreditnih obaveza te tu pretpostavku ponovno testiramo testom o proporciji. Hipoteze su sljedeće:
+
+H0: Proporcija onih koji nisu defaultali naspram onih koji su ispunili obaveze jednaka je kod oženjenih muškaraca i žena (ili je manja kod oženjenih muškaraca).\
+H1: Proporcija osoba koje nisu defaultali naspram onih koji su ispunili obaveze veća je kod oženjenih muškaraca.
+
+```{r}
+num_male_married <- data %>% filter(str_detect(PersonalStatus, "widowed")) %>% count() %>% as.numeric()
+num_male_married_default <- data %>% filter(str_detect(PersonalStatus, "widowed") & Default == T) %>% count() %>% as.numeric()
+
+proportion_matrix[1,] <- c(num_male_married - num_male_married_default,
+                           num_male_married_default)
+# proportion_matrix
+prop.test(proportion_matrix, alternative = "greater")
+```
+
+Pošto je p-vrijednost približno 0.097, na razini značajnosti 0.05 zaključujemo da oženjeni muškarci ispunjavaju kreditne obveze razmjerno ženama (tj. ne možemo reći da su skloniji ispunjavanju obveza).
+
 
 ## 3. pitanje: Postoje li razlike u traženom iznosu kredita prema imovini klijenta?
 
@@ -567,4 +595,51 @@ summary(a)
 
 Test nam kao rezultat daje p-vrijednost \<2e-16, na temelju čega odbacujemo nultu hipotezu u korist alternativne. Zaključujemo da postoji razlika u traženom iznosu kredita prema imovini klijenta. Takav rezultat i grafički možemo vidjeti na box-plotovima, gdje se vidi značajna razlika traženog iznosa između kategorija "real estate" i "unknown / no property".
 
+## 4. pitanje: Kakav je odnos iznosa kredita i vremena danog za njegovu otplatu?
+
+Iz grafa odnosa iznosa kredita i vremena njegove otplate, ispisanog u uvodnom dijelu, zakljčujemo da postoji mogućnost pozitivne linearne veze tih dviju varijabli. Stoga provodimo linearnu regresiju.
+
+```{r}
+fit.CreditAmount = lm(Duration~CreditAmount, data=data)
+plot(data$CreditAmount, data$Duration) #graficki prikaz podataka
+lines(data$CreditAmount, fit.CreditAmount$fitted.values, col='red') #graficki prikaz procijenjenih vrijednosti iz modela
+```
+
+Iako postoji veliki šum, graf potvrđuje pretpostavku o uzlaznoj koreliranosti iznosa kredita i trajanja njegove otplate. Pošto linearna regresija uz sebe ima određene pretpostavke, sada provjeravamo jesu li one narušene.
+
+### Provjera normalnosti reziduala
+
+```{r}
+hist((fit.CreditAmount$residuals)) # Histogram frekvecija reziduala
+qqnorm(rstandard(fit.CreditAmount)) # Q-Q plot reziduala
+qqline(rstandard(fit.CreditAmount))
+```
+
+Iako reziduali nisu savršeno normalni, u histogramu se vidi da distribucija nalikuje normalnoj, što donekle pokazuje i Q-Q plot.
+
+Sada radimo i analizu mjere kvalitete prilagodbe modela podatcima.
+
+```{r}
+summary(fit.CreditAmount)
+```
+
+Iz ovoga vidimo da je koeficijent uz zavisnu varijablu statistički značajan (p-vrijednost \<2e-16) te nam F-test kaže da je model statistički značajan.
+
+Iz ovoga zaključujemo da postoji veza između iznosa kredita i duljine njegove otplate, što je i očekivano.
+
+Sada izračunavamo koeficijent korelacije varijabli CreditAmount i Duration te provjeravamo je li ta korelacija statistički značajna.
+
+```{r}
+cor(data$CreditAmount,data$Duration)
+
+cor.test(data$CreditAmount,data$Duration)
+
+summary(fit.CreditAmount)
+```
+
+Dobili smo koeficijent korelacije približno jednak 0.62 koji je na temelju provedenog testa statistički značajan (p-vrijednost \<2.2e-16).
+
 # Zaključak
+
+U sklopu projekta proveli smo analizu podataka s ciljem određivanja vjerojatnosti defaulta klijenta banke. \
+Proveli smo vizualizaciju danih podataka i izračune deskriptivnih vrijednosti o podatcima te zatim proveli statističke testove u svrhu odgovaranja na četiri istraživačka pitanja. \ Logističkom regresijom odredili smo varijable koje najviše utječu na default klijenta. Testirali smo razliku ispunjavanja kreditnih obaveza među muškarcima i ženama te zaključili da su žene statistički značajno sklonije defaultu nego muškarci. Zaključili smo i da postoje razlike u traženom iznosu kredita prema imovini klijenta te smo odredili linearnu vezu odnosa kredita i perioda njegove otplate.
