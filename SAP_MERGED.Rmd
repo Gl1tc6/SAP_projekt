@@ -291,6 +291,8 @@ logreg.mdl2 <- glm(Default ~ as.numeric(AccountStatus) + Duration + as.numeric(C
 summary(logreg.mdl2)
 ```
 
+Na razini značajnosti 0,01 s Defaultom koreliraju varijable AccountStatus (pozitivno), Duration (pozitivno), CreditHistory (pozitivno), Purposecar (negativno), CreditAmount (pozitivno), EmploymentSince (negativno), PercentOfIncome (negativno), Property (negativno), Age (negativno), OtherInstallPlansbank (pozitivno) i Telephone registered under the customer's name (negativno). Povećavanjem iznosa pozitivno koreliranih varijabli vjerojatnost defaulta se povećava, a smanjenjem smanjuje te obrnuto za negativnu korelaciju. Kod kategoričkih varijabli (onih kojima nije napravljena transformacija funkcijom as.numeric()) korelacija svake od kategorija je određena relativno u odnosu na jednu referentnu (npr. kod kategorije Business referentna kategorija je Business te su za svaku ostalu kategoriju određene korelacije u odnosu na nju).
+
 Ponovno ispisujemo matricu konfuzije i još uvijek vidimo relativno veliku pogrešku druge vrste.
 
 ```{r}
@@ -564,3 +566,5 @@ summary(a)
 ```
 
 Test nam kao rezultat daje p-vrijednost \<2e-16, na temelju čega odbacujemo nultu hipotezu u korist alternativne. Zaključujemo da postoji razlika u traženom iznosu kredita prema imovini klijenta. Takav rezultat i grafički možemo vidjeti na box-plotovima, gdje se vidi značajna razlika traženog iznosa između kategorija "real estate" i "unknown / no property".
+
+# Zaključak
